@@ -1,4 +1,5 @@
 import WebSocket, { WebSocketServer } from "ws";
+import { prisma } from "./db";
 
 const PORT = 8080;
 
@@ -33,7 +34,7 @@ wss.on("connection", (socket)=>{
     console.log("new client connected");
 
     //when message is received from the client 
-    socket.on("message", (data)=>{
+    socket.on("message",async (data)=>{
         try {
             const parsed = JSON.parse(data.toString());  //parses the json string obj and convert it to obj
             const {type, roomId, payload} = parsed;  
@@ -58,10 +59,15 @@ wss.on("connection", (socket)=>{
                 socketRoom.set(socket, roomId);
 
                 console.log(`Client joined room: ${roomId}`);
+                const messages = await prisma.message.findMany({
+                    where : {roomId},
+                    orderBy : {createdAt : "asc"},
+                    take: 50,
+                })
                 socket.send(
                     JSON.stringify({
-                        type: "system",
-                        message: `Joined room ${roomId}`,
+                        type: "history",
+                        messages,
                     })
                 );
             }
