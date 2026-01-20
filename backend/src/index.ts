@@ -1,7 +1,21 @@
 import WebSocket, { WebSocketServer } from "ws";
 import { prisma } from "./db";
+import cookie from 'cookie';
+import jwt from 'jsonwebtoken';
+import dotenv from 'dotenv';
+dotenv.config();
 
 const PORT = 8080;
+const JWT_SECRET = process.env.JWT_SECRET || "54322";
+
+interface AuthenticateSocket extends WebSocket {
+    user? :{
+        userId : string,
+        name : string,
+    }
+}
+
+
 
 //create the websocket server
 const wss = new WebSocketServer({port : PORT}); 
@@ -30,8 +44,42 @@ socketRoom = {
 //	To broadcast → you need room → sockets
 // 	To clean up → you need socket → room
 
-wss.on("connection", (socket)=>{
+wss.on("connection", (socket : AuthenticateSocket, req)=>{
     console.log("new client connected");
+
+    //authentication logic 
+    try {
+        const cookieHeader = req.headers.cookie;
+        if(!cookieHeader){
+            socket.close();
+            return;
+        }
+
+        const cookies = cookie.parse(cookieHeader);
+        console.log("check the cookies", cookies);
+        const token = cookies.token;
+        console.log("check the token", token);
+
+        if(!token){
+            socket.close();
+            return;
+        }
+
+        const payload = jwt.verify(token, JWT_SECRET!) as {
+            userId : string,
+            name : string
+        };
+
+        socket.user = {
+            userId : payload.userId,
+            name : payload.name
+        }
+        console.log(`Authenticated via cookie: ${payload.name}`);
+    } catch (error) {
+        console.log("Cookie auth failed");
+        socket.close();
+        return;
+    }
 
     //when message is received from the client 
     socket.on("message",async (data)=>{
@@ -59,6 +107,7 @@ wss.on("connection", (socket)=>{
                 socketRoom.set(socket, roomId);
 
                 console.log(`Client joined room: ${roomId}`);
+                //retriving the messages from the database
                 const messages = await prisma.message.findMany({
                     where : {roomId},
                     orderBy : {createdAt : "asc"},
@@ -90,6 +139,14 @@ wss.on("connection", (socket)=>{
                         )
                     };
                 };
+
+                //save the messages to the database
+                await prisma.message.create({
+                    data : {
+                        roomId : currentRoom,
+                        content : payload
+                    }
+                })
             }
 
         } catch (error) {
