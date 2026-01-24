@@ -4,8 +4,9 @@ import bcrypt from 'bcrypt';
 import { signToken } from "./utils";
 
 export async function Login(req : Request, res : Response){
-    const {email, passwod} = req.body;
-    if(!email || !passwod){
+    const {email, password} = req.body;
+    console.log("Reached login", email, password)
+    if(!email || !password){
         return res.status(400).json({
             message : "Missing fields!"
         })
@@ -23,7 +24,7 @@ export async function Login(req : Request, res : Response){
         })
     }
 
-    const hashedPassword = await bcrypt.compare(passwod, existingUser.password);
+    const hashedPassword = await bcrypt.compare(password, existingUser.password);
     if(!hashedPassword){
         return res.status(401).json({
             message : "Invalid Credentials!"
@@ -33,7 +34,8 @@ export async function Login(req : Request, res : Response){
     const token = signToken({userId : existingUser.id, name : existingUser.name});
     res.cookie("token", token, {
         httpOnly : true,
-        sameSite : 'lax'
+        sameSite : 'lax',
+        path: "/",
     })
 
     res.json({

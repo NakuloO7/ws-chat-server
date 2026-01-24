@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+  <body>
+    <button id="login">Login</button>
+
+    <script>
+      document.getElementById("login").onclick = async () => {
+        const res = await fetch("http://localhost:3000/auth/login", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          credentials: "include", // REQUIRED FOR COOKIES
+          body: JSON.stringify({
+            email: "nakul@test.com",
+            password: "123456"
+          })
+        });
+
+        const data = await res.json();
+        console.log("STATUS:", res.status);
+        console.log("DATA:", data)
+      };
+    </script>
+  </body>
+</html>
+
+
+<!-- const ws = new WebSocket("ws://localhost:8080");
+
+ws.onopen = () => console.log("CONNECTED");
+ws.onclose = () => console.log("CLOSED"); -->

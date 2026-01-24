@@ -9,6 +9,28 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+  
+  redis:
+    image: redis:7
+    container_name: ws-redis
+    ports:
+      - "6379:6379"
+
+  
+  backend:
+    build: .
+    container_name: chat-backend
+    depends_on:
+      - db
+      - redis
+    environment:
+      DATABASE_URL: postgresql://chat_user:chat_password@db:5432/chat_db
+      JWT_SECRET: 54322
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "3000:3000"
+      - "8080:8080"
 
 volumes:
   postgres_data:

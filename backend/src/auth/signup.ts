@@ -4,15 +4,15 @@ import { prisma } from "../db";
 import { signToken } from "./utils";
 
 export async function Signup(req : Request, res : Response){
-    const {name, email, passwod} = req.body;
+    const {name, email, password} = req.body;
 
-    if(!name || !email || !passwod) {
+    if(!name || !email || !password) {
         return res.status(400).json({
             message : "Missing fields"
         })
     }
 
-    const hashedPassword = await bcrypt.hash(passwod, 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
     const user = await prisma.user.create({
         data : {
             name,
@@ -25,7 +25,8 @@ export async function Signup(req : Request, res : Response){
     console.log("Token from signup route", token);
     res.cookie("token", token, {
         httpOnly : false,
-        sameSite : 'lax'
+        sameSite : 'lax',
+        path: "/",
     })
 
     res.json({
