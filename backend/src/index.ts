@@ -6,9 +6,10 @@ import dotenv from 'dotenv';
 import { AuthenticateSocket } from "./types/ws";
 import { IncomingMessage } from "http";
 import app from "./http";
+import { pub, sub } from "./redis";
 dotenv.config();
 
-const PORT = 8080;
+const WS_PORT = Number(process.env.WS_PORT) || 8080;
 const JWT_SECRET = process.env.JWT_SECRET || "54322";
 
 
@@ -16,8 +17,8 @@ const JWT_SECRET = process.env.JWT_SECRET || "54322";
 
 
 //create the websocket server
-const wss = new WebSocketServer({port : PORT}); 
-console.log(`Websocket sever running on ws://localhost:${PORT}`);
+const wss = new WebSocketServer({port : WS_PORT}); 
+console.log(`Websocket sever running on ws://localhost:${WS_PORT}`);
 
 
 // roomId -> set of sockets
@@ -41,6 +42,23 @@ socketRoom = {
 
 //	To broadcast → you need room → sockets
 // 	To clean up → you need socket → room
+
+
+sub.psubscribe("room:*");  //redis subscriber code
+
+//this will put the message received in a particular room of the socket
+sub.on('pmessage', (_, channel, message)=>{
+    const roomId = channel.replace("room:", "");
+    const parsed = JSON.parse(message);
+
+    const clients = rooms.get(roomId);
+    if(!clients) return;
+    for(const client of clients){
+        if(client.readyState === WebSocket.OPEN){
+            client.send(JSON.stringify(parsed));
+        }
+    }
+})
 
 wss.on("connection", (socket : AuthenticateSocket, req : IncomingMessage)=>{
     console.log("new client connected");
@@ -134,11 +152,14 @@ wss.on("connection", (socket : AuthenticateSocket, req : IncomingMessage)=>{
                     user : socket.user,
                     payload, 
                 }
-                for(const client of clients){
-                    if(client.readyState === WebSocket.OPEN){
-                        client.send(JSON.stringify(messageData));
-                    };
-                };
+                // for(const client of clients){
+                //     if(client.readyState === WebSocket.OPEN){
+                //         client.send(JSON.stringify(messageData));
+                //     };
+                // };   //because we are using redis now
+
+                // Publish to Redis instead of local broadcast
+                await pub.publish(`room:${currentRoom}`,JSON.stringify(messageData));
 
                 //save the messages to the database
                 await prisma.message.create({
