@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 
 export interface chatMessage {
   type: "message";
@@ -12,10 +11,9 @@ export interface chatMessage {
 }
 
 export interface UIMessage {
-  id?: string;
+  userId: string | null;
   userName: string;
   text: string;
-  createdAt?: string;
 }
 
 export const useWebSocket = (roomId: string) => {
@@ -53,10 +51,9 @@ export const useWebSocket = (roomId: string) => {
         //Handle History of messages
         if (data.type === "history") {
           const normalized: UIMessage[] = data.messages.map((m: any) => ({
-            id: m.id,
+            userId: null,
             userName: "History", // later you can resolve real user
             text: m.content,
-            createdAt: m.createdAt,
           }));
 
           setMessages(normalized);
@@ -64,7 +61,9 @@ export const useWebSocket = (roomId: string) => {
 
         //Handle incoming messages
         if (data.type === "message") {
+          console.log();
           const normalized: UIMessage = {
+            userId: data.user.userId,
             userName: data.user.name,
             text: data.payload,
           };

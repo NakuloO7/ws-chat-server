@@ -81,14 +81,16 @@ wss.on("connection", (socket : AuthenticateSocket, req : IncomingMessage)=>{
             return;
         }
 
-        const payload = jwt.verify(token, JWT_SECRET!) as {
-            userId : string,
-            name : string
+        const decoded = jwt.verify(token, JWT_SECRET!) as {
+           payload: {
+                userId: string;
+                name: string;
+            };
         };
 
         socket.user = {
-            userId : payload.userId,
-            name : payload.name
+            userId : decoded.payload.userId,
+            name : decoded.payload.name
         }
     } catch (error) {
         console.log("Cookie auth failed");
@@ -165,7 +167,9 @@ wss.on("connection", (socket : AuthenticateSocket, req : IncomingMessage)=>{
                 await prisma.message.create({
                     data : {
                         roomId : currentRoom,
-                        content : payload
+                        content : payload,
+                        userId : socket.user.userId,
+                        userName : socket.user.name
                     }
                 })
             }

@@ -5,7 +5,6 @@ import { signToken } from "./utils";
 
 export async function Login(req : Request, res : Response){
     const {email, password} = req.body;
-    console.log("Reached login", email, password)
     if(!email || !password){
         return res.status(400).json({
             message : "Missing fields!"

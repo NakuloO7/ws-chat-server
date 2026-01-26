@@ -5,6 +5,7 @@ import { signToken } from "./utils";
 
 export async function Signup(req : Request, res : Response){
     const {name, email, password} = req.body;
+    console.log(req.body);
 
     if(!name || !email || !password) {
         return res.status(400).json({
