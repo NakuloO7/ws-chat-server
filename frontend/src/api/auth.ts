@@ -18,7 +18,7 @@ export const signup = async(data : SignupPayload)=>{
         email : data.email,
         password : data.password
     });
-    return res.data;
+    return res.data;  
 }
 
 
