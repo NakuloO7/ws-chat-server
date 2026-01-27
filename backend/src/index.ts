@@ -174,6 +174,16 @@ wss.on("connection", (socket : AuthenticateSocket, req : IncomingMessage)=>{
                 })
             }
 
+            //leave the room logic
+            if(type === "leave"){
+                const currentRoom = socketRoom.get(socket);
+                if(!currentRoom) return;
+                
+                rooms.get(currentRoom)?.delete(socket);
+                socketRoom.delete(socket);
+                console.log(`Client left room: ${currentRoom}`);
+            }
+
         } catch (error) {
             console.error("Invalid message format");
         };

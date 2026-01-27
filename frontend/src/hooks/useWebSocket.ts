@@ -21,53 +21,48 @@ export const useWebSocket = (roomId: string) => {
   const [messages, setMessages] = useState<UIMessage[]>([]);
   const [connected, setConnected] = useState(false);
   const [fatalError, setFatalError] = useState(false);
+  const currentRoomRef = useRef<string | null>(null);
 
+  //create & destroy socket
   useEffect(() => {
-    let isMounted = true;
     try {
       //create a websocket connection
       const socket = new WebSocket("ws://localhost:8080");
       socketRef.current = socket;
 
       socket.onopen = () => {
-        if (!isMounted) return;
         console.log("WS connected!");
         setConnected(true);
-
-        //Join room
         socket.send(
           JSON.stringify({
             type: "join",
             roomId,
           }),
         );
+        currentRoomRef.current = roomId;
       };
 
       //send message in the room
       socket.onmessage = (event) => {
-        if (!isMounted) return;
         const data = JSON.parse(event.data);
 
         //Handle History of messages
         if (data.type === "history") {
           const normalized: UIMessage[] = data.messages.map((m: any) => ({
-            userId: null,
-            userName: "History", // later you can resolve real user
+            userId: m.userId,
+            userName: m.userName, // later you can resolve real user
             text: m.content,
           }));
-
           setMessages(normalized);
         }
 
         //Handle incoming messages
         if (data.type === "message") {
-          console.log();
           const normalized: UIMessage = {
             userId: data.user.userId,
             userName: data.user.name,
             text: data.payload,
           };
-
           setMessages((prev) => [...prev, normalized]);
         }
       };
@@ -88,13 +83,34 @@ export const useWebSocket = (roomId: string) => {
       };
 
       return () => {
-        isMounted = false;
         socket.close();
       };
     } catch (error) {
       console.error("WS setup failed", error);
       setFatalError(true);
     }
+  }, []);
+
+  //for joining and leaving the room
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+
+    //leave the previous room
+    //currentRoomRef.current. -> initial room the socket is in
+    if (currentRoomRef.current) {
+      socket.send(JSON.stringify({ type: "leave" }));
+    }
+
+    //join the new room
+    socket.send(
+      JSON.stringify({
+        type: "join",
+        roomId,
+      }),
+    );
+
+    currentRoomRef.current = roomId;
   }, [roomId]);
 
   const sendMessage = (text: string) => {
@@ -109,10 +125,20 @@ export const useWebSocket = (roomId: string) => {
     );
   };
 
+  const leaveRoom = ()=>{
+    const socket = socketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+
+    socket.send(JSON.stringify({ type: "leave" }));
+    currentRoomRef.current = null;
+    setMessages([]);
+  }
+
   return {
     messages,
     sendMessage,
     connected,
     fatalError,
+    leaveRoom
   };
 };
