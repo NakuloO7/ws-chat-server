@@ -1,3 +1,4 @@
+import axios from "axios";
 import { useEffect, useRef, useState } from "react";
 
 export interface chatMessage {
@@ -14,6 +15,7 @@ export interface UIMessage {
   userId: string | null;
   userName: string;
   text: string;
+  createdAt: string;
 }
 
 export const useWebSocket = (roomId: string) => {
@@ -21,7 +23,64 @@ export const useWebSocket = (roomId: string) => {
   const [messages, setMessages] = useState<UIMessage[]>([]);
   const [connected, setConnected] = useState(false);
   const [fatalError, setFatalError] = useState(false);
-  const currentRoomRef = useRef<string | null>(null);
+
+  //Tracks which room the socket is currently in
+  const currentRoomRef = useRef<string | null>(roomId);
+
+  //Pagination state
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const loadingRef = useRef(false);
+
+  //HTTP: Load initial messages (history)
+  const loadInitialMessages = async (roomId: string) => {
+    console.log("Loading initial messages for room:", roomId);
+    const res = await axios.get(
+      `http://localhost:3000/messages?roomId=${roomId}&limit=30`,
+      {
+        withCredentials: true,
+      },
+    );
+
+    const data = res.data;
+    const normalized : UIMessage[] = data.messages.map((m: any) => ({
+      userId: m.userId,
+      userName: m.userName,
+      text: m.content,
+      createdAt: m.createdAt,
+    }));
+    setMessages(normalized);
+    setCursor(data.nextCursor);
+    setHasMore(!!data.nextCursor);
+  };
+
+  const loadOlderMessages = async()=>{
+    if (!hasMore) return;
+    if (loadingRef.current) return;
+    if (!cursor) return;
+
+    loadingRef.current = true;
+    try {
+      const res = await axios.get(`http://localhost:3000/messages?roomId=${roomId}&limit=30&cursor=${cursor}`,
+        { withCredentials: true }
+      );
+      const data = res.data;
+      const normalized: UIMessage[] = data.messages.map((m: any) => ({
+        userId: m.userId,
+        userName: m.userName,
+        text: m.content,
+        createdAt: m.createdAt,
+      }));
+
+      // ⬆️ PREPEND older messages
+      setMessages((prev) => [...normalized, ...prev]);
+      setCursor(data.nextCursor);
+      setHasMore(!!data.nextCursor);
+      
+    } finally {
+      loadingRef.current = false;
+    }
+  }
 
   //create & destroy socket
   useEffect(() => {
@@ -33,28 +92,30 @@ export const useWebSocket = (roomId: string) => {
       socket.onopen = () => {
         console.log("WS connected!");
         setConnected(true);
-        socket.send(
-          JSON.stringify({
-            type: "join",
-            roomId,
-          }),
-        );
-        currentRoomRef.current = roomId;
+        // ✅ Join room ONLY after socket is open
+        if (currentRoomRef.current) {
+          socket.send(
+            JSON.stringify({
+              type: "join",
+              roomId: currentRoomRef.current,
+            })
+          );
+        }
       };
 
       //send message in the room
       socket.onmessage = (event) => {
         const data = JSON.parse(event.data);
 
-        //Handle History of messages
-        if (data.type === "history") {
-          const normalized: UIMessage[] = data.messages.map((m: any) => ({
-            userId: m.userId,
-            userName: m.userName, // later you can resolve real user
-            text: m.content,
-          }));
-          setMessages(normalized);
-        }
+        // //Handle History of messages
+        // if (data.type === "history") {
+        //   const normalized: UIMessage[] = data.messages.map((m: any) => ({
+        //     userId: m.userId,
+        //     userName: m.userName, // later you can resolve real user
+        //     text: m.content,
+        //   }));
+        //   setMessages(normalized);
+        // }
 
         //Handle incoming messages
         if (data.type === "message") {
@@ -62,6 +123,7 @@ export const useWebSocket = (roomId: string) => {
             userId: data.user.userId,
             userName: data.user.name,
             text: data.payload,
+            createdAt: data.createdAt,
           };
           setMessages((prev) => [...prev, normalized]);
         }
@@ -93,24 +155,28 @@ export const useWebSocket = (roomId: string) => {
 
   //for joining and leaving the room
   useEffect(() => {
+    //currentRoomRef.current. -> initial room the socket is in
+    currentRoomRef.current = roomId;
+    // reset state from new room
+    setMessages([]);
+    setCursor(null);
+    setHasMore(true);
+
+    // ✅ LOAD HISTORY HERE
+    loadInitialMessages(roomId);
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
 
     //leave the previous room
-    //currentRoomRef.current. -> initial room the socket is in
     if (currentRoomRef.current) {
       socket.send(JSON.stringify({ type: "leave" }));
     }
-
-    //join the new room
     socket.send(
       JSON.stringify({
         type: "join",
         roomId,
-      }),
+      })
     );
-
-    currentRoomRef.current = roomId;
   }, [roomId]);
 
   const sendMessage = (text: string) => {
@@ -125,20 +191,26 @@ export const useWebSocket = (roomId: string) => {
     );
   };
 
-  const leaveRoom = ()=>{
+  const leaveRoom = () => {
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
 
     socket.send(JSON.stringify({ type: "leave" }));
     currentRoomRef.current = null;
     setMessages([]);
-  }
+    setCursor(null);
+    setHasMore(true);
+  };
 
   return {
     messages,
     sendMessage,
     connected,
     fatalError,
-    leaveRoom
+    leaveRoom,
+    // pagination state exposed (Phase 9.3A)
+    cursor,
+    hasMore,
+    loadOlderMessages
   };
 };

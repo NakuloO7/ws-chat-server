@@ -5,12 +5,17 @@ import { useUser } from "../context/UserContext";
 
 export const Chat = () => {
   const navigate = useNavigate();
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const initialLoadRef = useRef(true);
+  const loadingOlderRef = useRef(false);
+  const isPrependingRef = useRef(false);
+
   const { roomId } = useParams<{ roomId: string }>();
   if (!roomId) {
     return <div className="text-white p-6">Invalid room</div>;
   }
 
-  const { messages, sendMessage, connected, fatalError, leaveRoom } =
+  const { messages, sendMessage, connected, fatalError, leaveRoom ,hasMore, cursor, loadOlderMessages} =
     useWebSocket(roomId);
   const [text, setText] = useState("");
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -22,10 +27,58 @@ export const Chat = () => {
     }
   }, [fatalError, navigate]);
 
-  // Auto-scroll to bottom when new message arrives
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  useEffect(()=>{
+    const el = containerRef.current;
+    if(!el) return;
+    const onScroll = async()=>{
+      // Just detect, don’t load yet
+      if (el.scrollTop < 80 && hasMore &&  !loadingOlderRef.current) {
+        isPrependingRef.current = true;
+        loadingOlderRef.current = true;
+
+        const prevScrollHeight = el.scrollHeight;
+        await loadOlderMessages();
+        // ⛓ preserve scroll position
+        requestAnimationFrame(() => {
+          el.scrollTop = el.scrollHeight - prevScrollHeight;
+          loadingOlderRef.current = false;
+
+          // keep this TRUE until next render cycle
+          setTimeout(() => {
+            isPrependingRef.current = false;
+          }, 0);
+
+        });
+      }
+    }
+    el.addEventListener("scroll", onScroll);
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [hasMore, loadOlderMessages]);
+
+
+  useEffect(()=>{
+    if(!messages.length) return;
+  
+    // Never auto-scroll during prepend 
+    if (isPrependingRef.current) return;
+    
+    //only on initial load
+    if (initialLoadRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "auto" });
+      initialLoadRef.current = false;
+      return;
+    }
+    // New live message: only scroll if user is near bottom
+    const el = containerRef.current;
+    if (!el) return;
+    const distanceFromBottom =
+      el.scrollHeight - el.scrollTop - el.clientHeight;
+
+    if (distanceFromBottom < 120) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+
+  }, [messages])
 
   const handleSend = () => {
     if (!text.trim()) return;
@@ -33,17 +86,19 @@ export const Chat = () => {
     setText("");
   };
 
-  if (loading) {
-    return <div className="text-white p-6">Loading...</div>;
-  }
-
   // Utility function to capitalize the first letter of a string
   const capitalizeFirstLetter = (string: string) => {
     if (!string) return "";
     return string.charAt(0).toUpperCase() + string.slice(1);
   };
 
-return (
+  
+
+  if (loading) {
+    return <div className="text-white p-6">Loading...</div>;
+  }
+
+  return (
     <div className="fixed inset-0 w-full h-full bg-zinc-950 text-white flex items-center justify-center antialiased overflow-hidden">
       {/* Chat Container - Full width on mobile/tablet, constrained on desktop */}
       <div className="w-full h-full md:h-[90vh] md:max-w-4xl lg:max-w-3xl xl:max-w-2xl md:rounded-lg md:shadow-2xl md:border md:border-zinc-800/50 flex flex-col overflow-hidden">
@@ -91,9 +146,11 @@ return (
         </header>
 
         {/* Messages Container - Fully responsive with proper spacing */}
-        <div className="flex-1 overflow-y-auto px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4 md:py-6 space-y-2 sm:space-y-2.5 md:space-y-3 custom-scrollbar min-h-0">
+        <div
+          ref={containerRef}
+          className="flex-1 overflow-y-auto px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4 md:py-6 space-y-2 sm:space-y-2.5 md:space-y-3 custom-scrollbar min-h-0">
           {messages.length === 0 && (
-            <div className="flex items-center justify-center h-full min-h-[200px]">
+            <div className="flex items-center justify-center h-full min-h-50">
               <p className="text-xs sm:text-sm md:text-base text-zinc-500/70 text-center px-4">
                 No messages yet. Start the conversation!
               </p>

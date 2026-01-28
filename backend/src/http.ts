@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import authRouter from './routes/auth.route';
+import messageRouter from './routes/messages';
 
 import path from "path";
 const PORT = 3000;
@@ -20,5 +21,6 @@ app.use(cors({
 app.use(express.static(path.join(__dirname, "..", "public")));
 
 app.use('/auth', authRouter);
+app.use('/messages', messageRouter);
 
 export default app;
