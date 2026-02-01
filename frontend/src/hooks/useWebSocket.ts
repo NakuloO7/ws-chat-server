@@ -12,10 +12,12 @@ export interface chatMessage {
 }
 
 export interface UIMessage {
+  id: string;
   userId: string | null;
   userName: string;
   text: string;
   createdAt: string;
+  isDeleted?: boolean;
 }
 
 export const useWebSocket = (roomId: string) => {
@@ -43,7 +45,8 @@ export const useWebSocket = (roomId: string) => {
     );
 
     const data = res.data;
-    const normalized : UIMessage[] = data.messages.map((m: any) => ({
+    const normalized: UIMessage[] = data.messages.map((m: any) => ({
+      id : m.id,
       userId: m.userId,
       userName: m.userName,
       text: m.content,
@@ -54,15 +57,16 @@ export const useWebSocket = (roomId: string) => {
     setHasMore(!!data.nextCursor);
   };
 
-  const loadOlderMessages = async()=>{
+  const loadOlderMessages = async () => {
     if (!hasMore) return;
     if (loadingRef.current) return;
     if (!cursor) return;
 
     loadingRef.current = true;
     try {
-      const res = await axios.get(`http://localhost:3000/messages?roomId=${roomId}&limit=30&cursor=${cursor}`,
-        { withCredentials: true }
+      const res = await axios.get(
+        `http://localhost:3000/messages?roomId=${roomId}&limit=30&cursor=${cursor}`,
+        { withCredentials: true },
       );
       const data = res.data;
       const normalized: UIMessage[] = data.messages.map((m: any) => ({
@@ -76,11 +80,10 @@ export const useWebSocket = (roomId: string) => {
       setMessages((prev) => [...normalized, ...prev]);
       setCursor(data.nextCursor);
       setHasMore(!!data.nextCursor);
-      
     } finally {
       loadingRef.current = false;
     }
-  }
+  };
 
   //create & destroy socket
   useEffect(() => {
@@ -98,7 +101,7 @@ export const useWebSocket = (roomId: string) => {
             JSON.stringify({
               type: "join",
               roomId: currentRoomRef.current,
-            })
+            }),
           );
         }
       };
@@ -120,12 +123,22 @@ export const useWebSocket = (roomId: string) => {
         //Handle incoming messages
         if (data.type === "message") {
           const normalized: UIMessage = {
+            id : data.id,
             userId: data.user.userId,
             userName: data.user.name,
             text: data.payload,
             createdAt: data.createdAt,
           };
           setMessages((prev) => [...prev, normalized]);
+        }
+
+        //handle edit message
+        if (data.type === "edit") {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === data.messageId ? { ...msg, text: data.text } : msg,
+            ),
+          );
         }
       };
 
@@ -175,7 +188,7 @@ export const useWebSocket = (roomId: string) => {
       JSON.stringify({
         type: "join",
         roomId,
-      })
+      }),
     );
   }, [roomId]);
 
@@ -211,6 +224,6 @@ export const useWebSocket = (roomId: string) => {
     // pagination state exposed (Phase 9.3A)
     cursor,
     hasMore,
-    loadOlderMessages
+    loadOlderMessages,
   };
 };
