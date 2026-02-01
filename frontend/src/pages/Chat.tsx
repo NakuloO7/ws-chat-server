@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useNavigate, useParams } from "react-router-dom";
 import { useUser } from "../context/UserContext";
+import axios from "axios";
 
 export const Chat = () => {
   const navigate = useNavigate();
@@ -15,8 +16,16 @@ export const Chat = () => {
     return <div className="text-white p-6">Invalid room</div>;
   }
 
-  const { messages, sendMessage, connected, fatalError, leaveRoom ,hasMore, cursor, loadOlderMessages} =
-    useWebSocket(roomId);
+  const {
+    messages,
+    sendMessage,
+    connected,
+    fatalError,
+    leaveRoom,
+    hasMore,
+    cursor,
+    loadOlderMessages,
+  } = useWebSocket(roomId);
   const [text, setText] = useState("");
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const { user, loading } = useUser();
@@ -27,12 +36,12 @@ export const Chat = () => {
     }
   }, [fatalError, navigate]);
 
-  useEffect(()=>{
+  useEffect(() => {
     const el = containerRef.current;
-    if(!el) return;
-    const onScroll = async()=>{
+    if (!el) return;
+    const onScroll = async () => {
       // Just detect, don’t load yet
-      if (el.scrollTop < 80 && hasMore &&  !loadingOlderRef.current) {
+      if (el.scrollTop < 80 && hasMore && !loadingOlderRef.current) {
         isPrependingRef.current = true;
         loadingOlderRef.current = true;
 
@@ -47,21 +56,19 @@ export const Chat = () => {
           setTimeout(() => {
             isPrependingRef.current = false;
           }, 0);
-
         });
       }
-    }
+    };
     el.addEventListener("scroll", onScroll);
     return () => el.removeEventListener("scroll", onScroll);
   }, [hasMore, loadOlderMessages]);
 
+  useEffect(() => {
+    if (!messages.length) return;
 
-  useEffect(()=>{
-    if(!messages.length) return;
-  
-    // Never auto-scroll during prepend 
+    // Never auto-scroll during prepend
     if (isPrependingRef.current) return;
-    
+
     //only on initial load
     if (initialLoadRef.current) {
       bottomRef.current?.scrollIntoView({ behavior: "auto" });
@@ -71,14 +78,12 @@ export const Chat = () => {
     // New live message: only scroll if user is near bottom
     const el = containerRef.current;
     if (!el) return;
-    const distanceFromBottom =
-      el.scrollHeight - el.scrollTop - el.clientHeight;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
 
     if (distanceFromBottom < 120) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-
-  }, [messages])
+  }, [messages]);
 
   const handleSend = () => {
     if (!text.trim()) return;
@@ -92,7 +97,17 @@ export const Chat = () => {
     return string.charAt(0).toUpperCase() + string.slice(1);
   };
 
-  
+  // 🔹 EDIT MESSAGE STATE (ADD HERE)
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+
+  const updateMessage = async (id: string, text: string) => {
+    await axios.patch(
+      `http://localhost:3000/messages/${id}`,
+      { text },
+      { withCredentials: true },
+    );
+  };
 
   if (loading) {
     return <div className="text-white p-6">Loading...</div>;
@@ -148,7 +163,8 @@ export const Chat = () => {
         {/* Messages Container - Fully responsive with proper spacing */}
         <div
           ref={containerRef}
-          className="flex-1 overflow-y-auto px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4 md:py-6 space-y-2 sm:space-y-2.5 md:space-y-3 custom-scrollbar min-h-0">
+          className="flex-1 overflow-y-auto px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4 md:py-6 space-y-2 sm:space-y-2.5 md:space-y-3 custom-scrollbar min-h-0"
+        >
           {messages.length === 0 && (
             <div className="flex items-center justify-center h-full min-h-50">
               <p className="text-xs sm:text-sm md:text-base text-zinc-500/70 text-center px-4">
@@ -158,6 +174,7 @@ export const Chat = () => {
           )}
           {messages.map((msg, i) => {
             const isMe = msg.userId === user?.userId;
+            const isEditing = editingId === msg.id;
 
             // Group messages (WhatsApp style)
             const prev = messages[i - 1];
@@ -166,7 +183,7 @@ export const Chat = () => {
 
             return (
               <div
-                key={i}
+                key={msg.id}
                 className={`flex ${isMe ? "justify-end" : "justify-start"} ${isGrouped ? "mt-0.5 sm:mt-1" : "mt-1 sm:mt-1.5 md:mt-2"}`}
               >
                 <div className="max-w-[90%] xs:max-w-[85%] sm:max-w-[75%] md:max-w-[70%] lg:max-w-[65%]">
@@ -177,15 +194,38 @@ export const Chat = () => {
                     </p>
                   )}
 
-                  {/* Message bubble - Fully responsive styling */}
+                  {/* Message bubble */}
                   <div
-                    className={`px-3 py-2 sm:px-3.5 sm:py-2.5 md:px-4 md:py-3 rounded-2xl shadow-md text-xs sm:text-sm md:text-[15px] lg:text-base leading-relaxed break-words ${
+                    onDoubleClick={() => {
+                      if (!isMe) return;
+                      setEditingId(msg.id);
+                      setEditText(msg.text);
+                    }}
+                    className={`px-3 py-2 sm:px-3.5 sm:py-2.5 md:px-4 md:py-3 rounded-2xl shadow-md cursor-${isMe ? "text" : "default"} ${
                       isMe
-                        ? "bg-gradient-to-br from-pink-600 to-purple-600 text-white rounded-br-sm"
+                        ? "bg-linear-to-br from-pink-600 to-purple-600 text-white rounded-br-sm"
                         : "bg-zinc-800/90 text-zinc-100 rounded-bl-sm border border-zinc-700/50"
                     }`}
                   >
-                    {msg.text}
+                    {isEditing ? (
+                      <input
+                        value={editText}
+                        autoFocus
+                        onChange={(e) => setEditText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            updateMessage(msg.id, editText);
+                            setEditingId(null);
+                          }
+                          if (e.key === "Escape") {
+                            setEditingId(null);
+                          }
+                        }}
+                        className="w-full bg-transparent outline-none border-b border-zinc-400 text-white"
+                      />
+                    ) : (
+                      <span>{msg.text}</span>
+                    )}
                   </div>
                 </div>
               </div>
