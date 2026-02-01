@@ -44,6 +44,7 @@ export default router;
 
 
 //messages.ts returns messages older than a given timestamp, in small batches, so chat apps don’t load everything at once.
+//added to edit the message for a particular user
 router.patch('/:id', authMiddleware, async(req : AuthRequest , res)=>{
     const {id} = req.params;
     const {text} = req.body;
