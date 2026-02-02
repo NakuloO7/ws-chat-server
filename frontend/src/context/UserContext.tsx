@@ -1,5 +1,5 @@
 import axios from "axios";
-import { createContext, use, useContext, useEffect, useState } from "react"
+import { createContext, useContext, useEffect, useState } from "react"
 
 interface User {
     userId : string,
@@ -8,13 +8,11 @@ interface User {
 
 interface UserContextType {
     user : User | null,
-    loading : boolean
+    loading : boolean,
+    setUser: React.Dispatch<React.SetStateAction<User | null>>;
 }
 
-const UserContext = createContext<UserContextType>({
-    user : null,
-    loading : true
-});
+const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export const UserProvider = ({children} : {children : React.ReactNode})=>{
     const [user, setUser] = useState<User | null>(null);
@@ -30,10 +28,17 @@ export const UserProvider = ({children} : {children : React.ReactNode})=>{
     }, [])
 
     return (
-        <UserContext.Provider value={{user, loading}}>
+        <UserContext.Provider value={{user, loading, setUser}}>
             {children}
         </UserContext.Provider>
     );
 };
 
-export const useUser = () => useContext(UserContext);
+
+export const useUser = () => {
+  const context = useContext(UserContext);
+  if (!context) {
+    throw new Error("useUser must be used within UserProvider");
+  }
+  return context;
+};

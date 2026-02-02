@@ -17,7 +17,7 @@ export const Signup = () => {
       setError("");
       await signup({ name, email, password });
 
-      navigate("/login");
+      navigate("/chat");
     } catch (error) {
       setError("Invalid email or password!");
     } finally {

@@ -2,9 +2,14 @@ import { Request, Response } from "express"
 import { prisma } from "../db";
 import bcrypt from 'bcrypt';
 import { signToken } from "./utils";
+import { loginSchema } from "../schemas/auth.schema";
 
 export async function Login(req : Request, res : Response){
-    const {email, password} = req.body;
+    const parsed = loginSchema.safeParse(req.body);
+    if(!parsed.success){
+        return res.status(400).json(parsed.error.format());
+    }
+    const {email, password} = parsed.data;
     if(!email || !password){
         return res.status(400).json({
             message : "Missing fields!"
