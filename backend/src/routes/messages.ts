@@ -90,4 +90,38 @@ router.patch('/:id', authMiddleware, async(req : AuthRequest , res)=>{
     )
 
     res.json(updated);
+});
+
+
+router.delete('/:id', authMiddleware, async(req : AuthRequest, res)=>{
+    const {id} = req.params;
+    if(typeof(id) !== "string"){
+        return res.status(400).json({ error: "Invalid message id" });
+    }
+
+    const message = await prisma.message.findUnique({
+        where : {id}
+    })
+    if(!message){
+        return res.sendStatus(404);
+    }
+
+    if(!req.user || message.userId !== req.user.userId){
+        return res.sendStatus(403);
+    }
+
+    const deleted = await prisma.message.delete({
+        where : {id}
+    });
+
+    //realtime broadcast
+    await pub.publish(
+        `room:${message.roomId}`,
+        JSON.stringify({
+            type: "delete",
+            messageId: deleted.id,
+        })
+    );
+
+    res.json({success : true});
 })

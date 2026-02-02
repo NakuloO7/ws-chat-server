@@ -19,6 +19,9 @@ model Message{
   userName String
   
   createdAt DateTime @default(now())
+
+  edited Boolean @default(false)
+  deleted Boolean @default(false)
 }
 
 model User { 

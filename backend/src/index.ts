@@ -144,27 +144,13 @@ wss.on("connection", (socket: AuthenticateSocket, req: IncomingMessage) => {
         console.log(`Client left room: ${currentRoom}`);
       }
 
-      //send message in the room
       if (type === "message") {
-        const currentRoom = socketRoom.get(socket); //this will give the name of room for which the current socket belongs
+        const currentRoom = socketRoom.get(socket);
         if (!currentRoom) return;
+        if (!socket.user) return;
 
-        const clients = rooms.get(currentRoom); //this will return the set of sockets belong to current room
-        if (!clients) return;
-        const messageData = {
-          type: "message",
-          roomId: currentRoom,
-          user: socket.user,
-          payload,
-        };
-        // for(const client of clients){
-        //     if(client.readyState === WebSocket.OPEN){
-        //         client.send(JSON.stringify(messageData));
-        //     };
-        // };   //because we are using redis now
-
-        // 1️⃣ Save message FIRST
-        const created = await prisma.message.create({
+        // 1️⃣ SAVE FIRST (DB is source of truth)
+        const saved = await prisma.message.create({
           data: {
             roomId: currentRoom,
             content: payload,
@@ -172,19 +158,19 @@ wss.on("connection", (socket: AuthenticateSocket, req: IncomingMessage) => {
             userName: socket.user.name,
           },
         });
-        // Publish to Redis instead of local broadcast
-        // 2️⃣ Publish AFTER DB write (with ID)
+
+        // 2️⃣ PUBLISH WITH DB ID
         await pub.publish(
           `room:${currentRoom}`,
           JSON.stringify({
             type: "message",
-            messageId: created.id, // ✅ CRITICAL
+            id: saved.id, // ✅ CRITICAL
+            payload: saved.content,
+            createdAt: saved.createdAt,
             user: {
               userId: socket.user.userId,
               name: socket.user.name,
             },
-            payload: created.content,
-            createdAt: created.createdAt,
           }),
         );
       }

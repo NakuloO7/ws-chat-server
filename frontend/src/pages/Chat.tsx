@@ -101,12 +101,20 @@ export const Chat = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
 
-  const updateMessage = async (id: string, text: string) => {
+  const updateMessage = async ( text: string, id?: string,) => {
     await axios.patch(
       `http://localhost:3000/messages/${id}`,
       { text },
       { withCredentials: true },
     );
+  };
+
+  const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
+
+  const deleteMessage = async (id?: string) => {
+    await axios.delete(`http://localhost:3000/messages/${id}`, {
+      withCredentials: true,
+    });
   };
 
   if (loading) {
@@ -160,77 +168,120 @@ export const Chat = () => {
           </button>
         </header>
 
-        {/* Messages Container - Fully responsive with proper spacing */}
+        {/* Messages Container */}
         <div
           ref={containerRef}
           className="flex-1 overflow-y-auto px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4 md:py-6 space-y-2 sm:space-y-2.5 md:space-y-3 custom-scrollbar min-h-0"
         >
           {messages.length === 0 && (
-            <div className="flex items-center justify-center h-full min-h-50">
+            <div className="flex items-center justify-center h-full min-h-[200px]">
               <p className="text-xs sm:text-sm md:text-base text-zinc-500/70 text-center px-4">
                 No messages yet. Start the conversation!
               </p>
             </div>
           )}
+
           {messages.map((msg, i) => {
             const isMe = msg.userId === user?.userId;
             const isEditing = editingId === msg.id;
 
-            // Group messages (WhatsApp style)
+            // WhatsApp-style grouping
             const prev = messages[i - 1];
             const showName = !isMe && (!prev || prev.userId !== msg.userId);
-            const isGrouped = prev && prev.userId === msg.userId && !isMe;
+            const isGrouped = prev && prev.userId === msg.userId;
 
             return (
               <div
                 key={msg.id}
-                className={`flex ${isMe ? "justify-end" : "justify-start"} ${isGrouped ? "mt-0.5 sm:mt-1" : "mt-1 sm:mt-1.5 md:mt-2"}`}
+                className={`flex ${isMe ? "justify-end" : "justify-start"} ${
+                  isGrouped ? "mt-0.5" : "mt-2"
+                }`}
               >
-                <div className="max-w-[90%] xs:max-w-[85%] sm:max-w-[75%] md:max-w-[70%] lg:max-w-[65%]">
-                  {/* Show name ONLY when sender changes */}
+                <div className="max-w-[90%] sm:max-w-[75%] md:max-w-[70%] lg:max-w-[65%]">
+                  {/* Username (only when sender changes & not me) */}
                   {showName && (
-                    <p className="text-[9px] xs:text-[10px] sm:text-xs md:text-sm text-zinc-400/80 mb-0.5 sm:mb-1 ml-2 sm:ml-3.5 font-medium">
+                    <p className="text-[10px] sm:text-xs text-zinc-400 mb-1 ml-2 font-medium">
                       {capitalizeFirstLetter(msg.userName)}
                     </p>
                   )}
 
-                  {/* Message bubble */}
+                  {/* Message Bubble */}
                   <div
-                    onDoubleClick={() => {
-                      if (!isMe) return;
-                      setEditingId(msg.id);
-                      setEditText(msg.text);
+                    onClick={() => {
+                      if (!isMe || msg.deleted) return;
+                      setActiveMessageId(
+                        activeMessageId === msg.id ? null : msg.id,
+                      );
                     }}
-                    className={`px-3 py-2 sm:px-3.5 sm:py-2.5 md:px-4 md:py-3 rounded-2xl shadow-md cursor-${isMe ? "text" : "default"} ${
+                    className={`relative px-3 py-2 sm:px-4 sm:py-2.5 rounded-2xl shadow-md cursor-pointer ${
                       isMe
-                        ? "bg-linear-to-br from-pink-600 to-purple-600 text-white rounded-br-sm"
-                        : "bg-zinc-800/90 text-zinc-100 rounded-bl-sm border border-zinc-700/50"
+                        ? "bg-gradient-to-br from-pink-600 to-purple-600 text-white"
+                        : "bg-zinc-800 text-zinc-100"
                     }`}
                   >
-                    {isEditing ? (
+                    {/* Message Content */}
+                    {msg.deleted ? (
+                      <span className="italic text-xs text-zinc-300">
+                        This message was deleted
+                      </span>
+                    ) : isEditing ? (
                       <input
                         value={editText}
                         autoFocus
                         onChange={(e) => setEditText(e.target.value)}
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
-                            updateMessage(msg.id, editText);
+                            updateMessage( editText, msg.id);
                             setEditingId(null);
+                            setActiveMessageId(null);
                           }
                           if (e.key === "Escape") {
                             setEditingId(null);
+                            setActiveMessageId(null);
                           }
                         }}
-                        className="w-full bg-transparent outline-none border-b border-zinc-400 text-white"
+                        className="w-full bg-transparent outline-none border-b border-white/40"
                       />
                     ) : (
                       <span>{msg.text}</span>
                     )}
+
+                    {/* Actions – ONLY when clicked */}
+                    {isMe &&
+                      activeMessageId === msg.id &&
+                      !isEditing &&
+                      !msg.deleted && (
+                        <div
+                          className="absolute -bottom-9 right-0 flex gap-2 bg-zinc-900/90 px-2 py-1 rounded-lg shadow-lg"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            onClick={() => {
+                              setEditingId(msg.id);
+                              setEditText(msg.text);
+                            }}
+                            className="text-xs text-zinc-300 hover:text-white"
+                          >
+                            Edit
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              deleteMessage(msg.id);
+                              setActiveMessageId(null);
+                            }}
+                            className="text-xs text-red-400 hover:text-red-300"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
                   </div>
                 </div>
               </div>
             );
           })}
+
           <div ref={bottomRef} />
         </div>
 

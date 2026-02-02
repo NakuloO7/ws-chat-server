@@ -17,7 +17,7 @@ export interface UIMessage {
   userName: string;
   text: string;
   createdAt: string;
-  isDeleted?: boolean;
+  deleted?: boolean; // ✅ ADD
 }
 
 export const useWebSocket = (roomId: string) => {
@@ -46,7 +46,7 @@ export const useWebSocket = (roomId: string) => {
 
     const data = res.data;
     const normalized: UIMessage[] = data.messages.map((m: any) => ({
-      id : m.id,
+      id: m.id,
       userId: m.userId,
       userName: m.userName,
       text: m.content,
@@ -70,6 +70,7 @@ export const useWebSocket = (roomId: string) => {
       );
       const data = res.data;
       const normalized: UIMessage[] = data.messages.map((m: any) => ({
+        id: m.id,
         userId: m.userId,
         userName: m.userName,
         text: m.content,
@@ -123,13 +124,16 @@ export const useWebSocket = (roomId: string) => {
         //Handle incoming messages
         if (data.type === "message") {
           const normalized: UIMessage = {
-            id : data.id,
+            id: data.id,
             userId: data.user.userId,
             userName: data.user.name,
             text: data.payload,
             createdAt: data.createdAt,
           };
-          setMessages((prev) => [...prev, normalized]);
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === normalized.id)) return prev;
+            return [...prev, normalized];
+          });
         }
 
         //handle edit message
@@ -137,6 +141,15 @@ export const useWebSocket = (roomId: string) => {
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === data.messageId ? { ...msg, text: data.text } : msg,
+            ),
+          );
+        }
+
+        //handle delete message
+        if (data.type === "delete") {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === data.messageId ? { ...m, deleted: true, text: "" } : m,
             ),
           );
         }
@@ -168,28 +181,28 @@ export const useWebSocket = (roomId: string) => {
 
   //for joining and leaving the room
   useEffect(() => {
-    //currentRoomRef.current. -> initial room the socket is in
+    const socket = socketRef.current;
+    const prevRoom = currentRoomRef.current;
+
+    // leave previous room FIRST
+    if (socket && socket.readyState === WebSocket.OPEN && prevRoom) {
+      socket.send(JSON.stringify({ type: "leave" }));
+    }
+    // update room ref
     currentRoomRef.current = roomId;
-    // reset state from new room
+
+    // reset state
     setMessages([]);
     setCursor(null);
     setHasMore(true);
-
-    // ✅ LOAD HISTORY HERE
+    
+    // load history
     loadInitialMessages(roomId);
-    const socket = socketRef.current;
-    if (!socket || socket.readyState !== WebSocket.OPEN) return;
-
-    //leave the previous room
-    if (currentRoomRef.current) {
-      socket.send(JSON.stringify({ type: "leave" }));
+  
+    // join new room
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: "join", roomId }));
     }
-    socket.send(
-      JSON.stringify({
-        type: "join",
-        roomId,
-      }),
-    );
   }, [roomId]);
 
   const sendMessage = (text: string) => {
